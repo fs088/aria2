@@ -287,6 +287,30 @@ HTTP/FTP/SFTP Options
   Reuse already used URIs if no unused URIs are left.
   Default: ``true``
 
+.. option:: --retry-on-400 [true|false]
+
+  Configure whether retry or not when the HTTP server returns 400 Bad
+  Request. Only effective if :option:`--retry-wait` is greater than
+  ``0``. Default: ``false``
+
+.. option:: --retry-on-403 [true|false]
+
+  Configure whether retry or not when the HTTP server returns 403
+  Forbidden. Only effective if :option:`--retry-wait` is greater than
+  ``0``. Default: ``false``
+
+.. option:: --retry-on-406 [true|false]
+
+  Configure whether retry or not when the HTTP server returns 406 Not
+  Acceptable. Only effective if :option:`--retry-wait` is greater than
+  ``0``. Default: ``false``
+
+.. option:: --retry-on-unknown [true|false]
+
+  Configure whether retry or not when the HTTP server returns an unknown
+  status code. Only effective if :option:`--retry-wait` is greater than
+  ``0``. Default: ``false``
+
 .. option:: --retry-wait=<SEC>
 
   Set the seconds to wait between retries. When ``SEC > 0``, aria2 will
