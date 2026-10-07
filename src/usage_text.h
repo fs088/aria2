@@ -765,6 +765,13 @@
     "                              --max-connection-per-server, which is applied\n" \
     "                              to each download separately, this limits the\n" \
     "                              server as a whole.")
+#define TEXT_MAX_OVERALL_CONCURRENT_DOWNLOAD_PER_SERVER                     \
+  _(" --max-overall-concurrent-download-per-server=NUM Maximum number of\n"  \
+    "                              downloads that may use one server at the\n" \
+    "                              same time. 0 means no limit. A download\n" \
+    "                              with no free slot waits in the queue,\n" \
+    "                              and the next download is started instead\n" \
+    "                              of this one failing.")
 #define TEXT_MIN_SPLIT_SIZE                     \
   _(" -k, --min-split-size=SIZE    aria2 does not split less than 2*SIZE byte range.\n" \
     "                              For example, let's consider downloading 20MiB\n" \

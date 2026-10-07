@@ -81,12 +81,13 @@ bool CreateRequestCommand::executeInternal()
   if (getOption()->getAsBool(PREF_SELECT_LEAST_USED_HOST)) {
     getDownloadEngine()->getRequestGroupMan()->getUsedHosts(usedHosts);
   }
-  // The per-server connection count is shared by every download, so a server
-  // this file is free to use may still be full.  |grant| comes back telling us
+  // The per-server slot counts are shared by every download, so a server this
+  // file is free to use may still be full.  |grant| comes back telling us
   // whether that is what happened, which is a different thing from having no
   // URI left and must not be treated as a failure.
   SlotGrant grant;
   grant.registry = getDownloadEngine()->getRequestGroupMan()->getSlotRegistry();
+  grant.gid = getRequestGroup()->getGID();
   setRequest(
       getFileEntry()->getRequest(getRequestGroup()->getURISelector().get(),
                                  getOption()->getAsBool(PREF_REUSE_URI),
@@ -141,18 +142,21 @@ bool CreateRequestCommand::executeInternal()
 bool CreateRequestCommand::holdOrDefer(SlotGrant& grant)
 {
   auto registry = grant.registry;
-  auto gid = getRequestGroup()->getGID();
-  // Say which servers this download is short of a slot on, so that releasing a
-  // connection there wakes it again without a timer being involved.
-  registry->wait(gid, grant.refused);
+  auto gid = grant.gid;
+  // Say which servers this download is short of a slot on, so that releasing
+  // one there wakes it again without a timer.  The two kinds are registered
+  // apart: a connection freed on a server whose task slots are all held by
+  // other downloads is not the thing this attempt was refused.
+  registry->wait(SlotRegistry::CONN, gid, grant.refusedConn);
+  registry->wait(SlotRegistry::TASK, gid, grant.refusedTask);
 
   if (getRequestGroup()->getNumConnection() > 0) {
     // Other parts of this download are still transferring, so keep the
     // download where it is and wait here instead.  Re-adding the command
     // leaves it inactive until the engine next refreshes, which a release
     // brings forward; it is not re-examined on every iteration.
-    A2_LOG_DEBUG(fmt("CUID#%" PRId64 " - No per-server slot free,"
-                     " waiting for one.",
+    A2_LOG_DEBUG(fmt("CUID#%" PRId64
+                     " - No per-server slot free, waiting for one.",
                      getCuid()));
     addCommandSelf();
     return false;

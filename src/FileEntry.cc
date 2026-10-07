@@ -127,18 +127,28 @@ OutputIterator enumerateInFlightHosts(InputIterator first, InputIterator last,
 } // namespace
 
 namespace {
-// Charges |grant| for one connection slot on the server |req| is pointed at,
-// holding it in a lease owned by |req|.  Returns false and leaves no charge
-// behind if the server is full: the lease is a local that is destroyed on the
-// way out.
+// Charges |grant| for one connection and one task slot on the server |req| is
+// pointed at, holding both in leases owned by |req| once they are granted.
+// Returns false if either is refused, and then leaves no charge behind: the
+// leases are locals that are destroyed on the way out.  Which limit refused is
+// recorded in |grant|, because the caller has to wait for the one that did.
 bool chargeServer(SlotGrant* grant, const std::shared_ptr<Request>& req)
 {
-  auto lease = std::make_shared<SlotRegistry::Lease>();
-  if (!grant->registry->tryAcquire(*lease, req->getHost())) {
-    grant->refused.push_back(req->getHost());
+  auto registry = grant->registry;
+  auto conn = std::make_shared<SlotRegistry::Lease>();
+  if (!registry->tryAcquire(*conn, SlotRegistry::CONN, req->getHost(),
+                            grant->gid)) {
+    grant->refusedConn.push_back(req->getHost());
     return false;
   }
-  req->setSlotLease(std::move(lease));
+  auto task = std::make_shared<SlotRegistry::Lease>();
+  if (!registry->tryAcquire(*task, SlotRegistry::TASK, req->getHost(),
+                            grant->gid)) {
+    grant->refusedTask.push_back(req->getHost());
+    return false;
+  }
+  req->setSlotLease(std::move(conn));
+  req->setTaskLease(std::move(task));
   return true;
 }
 } // namespace
@@ -168,7 +178,7 @@ std::shared_ptr<Request> FileEntry::getRequestWithInFlightHosts(
           req.reset();
           continue;
         }
-        // The overall limit is counted over every download, so a server that
+        // The overall limits are counted over every download, so a server that
         // is saturated for this file alone is not saturated for it.  A refused
         // URI is put back exactly like a locally capped one, but the refusal is
         // also recorded, because the caller has to wait for a slot here rather
@@ -326,12 +336,15 @@ std::shared_ptr<Request> FileEntry::findFasterRequest(
                        (*i).c_str(), maxConnectionPerServer_));
       continue;
     }
-    // Switching to a server that has no free slot would get the new connection
-    // refused at creation time, so this replacement path has to honour the
-    // overall limit too.
-    if (grant && grant->registry && !grant->registry->hasFreeSlot(host)) {
-      A2_LOG_DEBUG(fmt("%s is at the overall per-server limit, not "
-                       "considered.",
+    // Switching to a server that could not grant a slot would get the new
+    // connection refused, so this replacement path has to honour the overall
+    // limits too.  Both kinds are screened for here rather than left to the
+    // charge below, so that a candidate that cannot be used is not chosen and
+    // the next one gets its turn.
+    if (grant && grant->registry &&
+        (!grant->registry->canAcquire(SlotRegistry::CONN, host, grant->gid) ||
+         !grant->registry->canAcquire(SlotRegistry::TASK, host, grant->gid))) {
+      A2_LOG_DEBUG(fmt("%s is at a per-server limit, not considered.",
                        (*i).c_str()));
       continue;
     }

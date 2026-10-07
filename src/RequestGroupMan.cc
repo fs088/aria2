@@ -129,17 +129,21 @@ RequestGroupMan::RequestGroupMan(
       numStoppedTotal_(0)
 {
   setupOptimizeConcurrentDownloads();
-  setPerServerLimit(option->getAsInt(PREF_MAX_OVERALL_CONNECTION_PER_SERVER));
+  setPerServerLimits(
+      option->getAsInt(PREF_MAX_OVERALL_CONNECTION_PER_SERVER),
+      option->getAsInt(PREF_MAX_OVERALL_CONCURRENT_DOWNLOAD_PER_SERVER));
   appendReservedGroup(reservedGroups_, requestGroups.begin(),
                       requestGroups.end());
 }
 
-void RequestGroupMan::setPerServerLimit(size_t maxConnectionPerServer)
+void RequestGroupMan::setPerServerLimits(size_t maxConnectionPerServer,
+                                         size_t maxConcurrentDownloadPerServer)
 {
-  slots_->setLimit(maxConnectionPerServer);
-  // Raising the limit may be what a parked download has been waiting for, and
-  // no connection was released for it to notice.  Ask for a queue check; it is
-  // cheap when nothing is waiting.
+  slots_->setLimit(SlotRegistry::CONN, maxConnectionPerServer);
+  slots_->setLimit(SlotRegistry::TASK, maxConcurrentDownloadPerServer);
+  // Raising a limit may be what a parked download has been waiting for, and no
+  // slot was released for it to notice.  Ask for a queue check; it is cheap
+  // when nothing is waiting.
   requestQueueCheck();
 }
 
@@ -257,7 +261,7 @@ bool RequestGroupMan::removeReservedGroup(a2_gid_t gid)
   if (reservedGroups_.remove(gid)) {
     // A download taken out of the queue by the user holds no slots and must
     // not be woken for one either.
-    slots_->cancelWait(gid);
+    slots_->forget(gid);
     return true;
   }
   return false;
@@ -473,10 +477,10 @@ public:
 
         if (group->isPauseRequested()) {
           // A paused download is not waiting for capacity, so drop the slot
-          // wait it had registered: unpausing starts it afresh and it asks
+          // waits it had registered: unpausing starts it afresh and it asks
           // again when it next selects a URI.  A download held for want of a
-          // slot keeps its wait, because a released connection is exactly what
-          // has to bring it back.
+          // slot keeps them, because a released slot is exactly what has to
+          // bring it back.
           e_->getRequestGroupMan()->getSlotRegistry()->cancelWait(
               group->getGID());
           if (group->isRestartRequested()) {
@@ -497,8 +501,7 @@ public:
         executeStopHook(group, e_->getOption(), dr->result);
         group->releaseRuntimeResource(e_);
         // The download is finished, so nothing may wake on its behalf again.
-        e_->getRequestGroupMan()->getSlotRegistry()->cancelWait(
-            group->getGID());
+        e_->getRequestGroupMan()->getSlotRegistry()->forget(group->getGID());
       }
 
       group->setRestartRequested(false);

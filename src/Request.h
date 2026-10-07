@@ -76,6 +76,10 @@ private:
   // held for as long as this request exists.  Null when no per-server limit is
   // in effect, or when this request was not created through URI selection.
   std::shared_ptr<SlotRegistry::Lease> slotLease_;
+  // Grant of one task slot on the same server: this download counts as one of
+  // the downloads using it.  Held and released alongside the connection slot,
+  // so the two cannot drift apart.
+  std::shared_ptr<SlotRegistry::Lease> taskLease_;
   bool removalRequested_;
   uint16_t connectedPort_;
   Timer wakeTime_;
@@ -174,6 +178,16 @@ public:
   void setSlotLease(std::shared_ptr<SlotRegistry::Lease> lease)
   {
     slotLease_ = std::move(lease);
+  }
+
+  const std::shared_ptr<SlotRegistry::Lease>& getTaskLease() const
+  {
+    return taskLease_;
+  }
+
+  void setTaskLease(std::shared_ptr<SlotRegistry::Lease> lease)
+  {
+    taskLease_ = std::move(lease);
   }
 
   void requestRemoval() { removalRequested_ = true; }

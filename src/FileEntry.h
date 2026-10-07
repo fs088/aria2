@@ -195,10 +195,10 @@ public:
   std::shared_ptr<Request>
   findFasterRequest(const std::shared_ptr<Request>& base);
 
-  // Finds faster server using ServerStatMan.  When |grant| names a registry, a
-  // server that has no free connection slot is not considered, so that this
-  // replacement path cannot walk past the per-server limit, and the slot for
-  // the server that is chosen is held by the returned Request.
+  // Finds faster server using ServerStatMan.  When |grant| names a registry,
+  // a server that cannot grant a slot to this download is not considered, so
+  // that this replacement path cannot walk past a per-server limit, and the
+  // slots for the server that is chosen are held by the returned Request.
   std::shared_ptr<Request> findFasterRequest(
       const std::shared_ptr<Request>& base,
       const std::vector<std::pair<size_t, std::string>>& usedHosts,

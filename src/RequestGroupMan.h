@@ -69,11 +69,12 @@ typedef IndexedList<a2_gid_t, std::shared_ptr<DownloadResult>>
 
 class RequestGroupMan {
 private:
-  // Per-server connection counts held across every download, so that
-  // --max-overall-connection-per-server can be applied globally rather than
-  // per download.  Declared first so that it is destroyed last: a Request
-  // releases its slot when it is destroyed, and the Requests live inside the
-  // groups below, so this must outlive them.
+  // Per-server slot counts held across every download, so that
+  // --max-overall-connection-per-server and
+  // --max-overall-concurrent-download-per-server can be applied globally
+  // rather than per download.  Declared first so that it is destroyed last: a
+  // Request releases its slot when it is destroyed, and the Requests live
+  // inside the groups below, so this must outlive them.
   std::unique_ptr<SlotRegistry> slots_;
 
   RequestGroupList requestGroups_;
@@ -343,16 +344,17 @@ public:
     return serverStatMan_;
   }
 
-  // The per-server connection counts shared by every download.  Never null
-  // once the manager is constructed, so callers can hand it to FileEntry
-  // without checking.
+  // The per-server slot counts shared by every download.  Never null once the
+  // manager is constructed, so callers can hand it to FileEntry without
+  // checking.
   SlotRegistry* getSlotRegistry() const { return slots_.get(); }
 
-  // Applies the global per-server connection maximum,
-  // --max-overall-connection-per-server.  A value of 0 is unlimited.  Downloads
-  // already holding more than a newly lowered limit are not cut off; the limit
-  // only stops further grants until they fall back.
-  void setPerServerLimit(size_t maxConnectionPerServer);
+  // Applies the two global per-server maxima, --max-overall-connection-per-
+  // server and --max-overall-concurrent-download-per-server.  A value of 0 is
+  // unlimited.  Downloads already holding more than a newly lowered limit are
+  // not cut off; the limit only stops further grants until they fall back.
+  void setPerServerLimits(size_t maxConnectionPerServer,
+                          size_t maxConcurrentDownloadPerServer);
 
   void setMaxDownloadResult(size_t v) { maxDownloadResult_ = v; }
 

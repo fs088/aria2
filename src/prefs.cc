@@ -318,6 +318,9 @@ PrefPtr PREF_MAX_CONNECTION_PER_SERVER = makePref("max-connection-per-server");
 PrefPtr PREF_MAX_OVERALL_CONNECTION_PER_SERVER =
     makePref("max-overall-connection-per-server");
 // value: 1*digit
+PrefPtr PREF_MAX_OVERALL_CONCURRENT_DOWNLOAD_PER_SERVER =
+    makePref("max-overall-concurrent-download-per-server");
+// value: 1*digit
 PrefPtr PREF_MIN_SPLIT_SIZE = makePref("min-split-size");
 // value: true | false
 PrefPtr PREF_CONDITIONAL_GET = makePref("conditional-get");

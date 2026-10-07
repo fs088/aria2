@@ -193,6 +193,15 @@ HTTP/FTP/SFTP Options
   allowed on its own, this limits the server itself, so it counts every
   download that uses it.  Default: ``0``
 
+.. option:: --max-overall-concurrent-download-per-server=<NUM>
+
+  The maximum number of downloads that may use one server at the same
+  time, however many connections each of them opens.  ``0`` means no
+  limit.  A download that has already been counted on a server is not
+  refused a further connection there, so this limits how many separate
+  downloads share a server rather than how much traffic they cause.
+  Default: ``0``
+
   A download which finds URIs but no free slot on any of their servers is
   not treated as an error and is not retried on a timer.  If it still has
   connections running it waits for a slot; if it has none, it is put back
@@ -203,8 +212,8 @@ HTTP/FTP/SFTP Options
 
   .. note::
 
-    Lowering the limit while downloads are running does not interrupt
-    them: the count is only brought down as connections are released
+    Lowering either limit while downloads are running does not interrupt
+    them: the counts are only brought down as slots are released
     naturally, and no further slot is granted on a server until then.
 
 .. option:: --max-file-not-found=<NUM>
@@ -3387,6 +3396,7 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
   * :option:`log-level <--log-level>`
   * :option:`max-concurrent-downloads <-j>`
   * :option:`max-download-result <--max-download-result>`
+  * :option:`max-overall-concurrent-download-per-server <--max-overall-concurrent-download-per-server>`
   * :option:`max-overall-connection-per-server <--max-overall-connection-per-server>`
   * :option:`max-overall-download-limit <--max-overall-download-limit>`
   * :option:`max-overall-upload-limit <--max-overall-upload-limit>`

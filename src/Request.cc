@@ -164,12 +164,13 @@ bool Request::parseUri(const std::string& srcUri)
     us_.swap(us);
     // A lease is a grant for one particular server.  A redirect to another
     // server would otherwise keep that server's count raised for as long as
-    // this request lives, so hand it back.  The new server is not charged
+    // this request lives, so hand both back.  The new server is not charged
     // here: re-granting needs the registry, and a redirect already steps past
     // the per-file max-connection-per-server count, so this stays consistent
-    // with it.  A same-server redirect keeps the lease.
+    // with it.  A same-server redirect keeps the leases.
     if (us_.host != slotLeaseHost()) {
       slotLease_.reset();
+      taskLease_.reset();
     }
     return true;
   }
