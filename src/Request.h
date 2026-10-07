@@ -38,7 +38,9 @@
 
 #include <string>
 #include <memory>
+#include <utility>
 
+#include "SlotRegistry.h"
 #include "TimerA2.h"
 #include "uri.h"
 
@@ -70,11 +72,20 @@ private:
   // maximum number of pipelined requests
   int maxPipelinedRequest_;
   std::shared_ptr<PeerStat> peerStat_;
+  // Grant of one connection slot on the server this request is pointed at,
+  // held for as long as this request exists.  Null when no per-server limit is
+  // in effect, or when this request was not created through URI selection.
+  std::shared_ptr<SlotRegistry::Lease> slotLease_;
   bool removalRequested_;
   uint16_t connectedPort_;
   Timer wakeTime_;
 
   bool parseUri(const std::string& uri);
+
+  // The server the held leases were granted on, or an empty string when
+  // nothing is held.  Used to notice that the request has been pointed at
+  // another server.
+  std::string slotLeaseHost() const;
 
 public:
   Request();
@@ -151,6 +162,19 @@ public:
   const std::shared_ptr<PeerStat>& getPeerStat() const { return peerStat_; }
 
   const std::shared_ptr<PeerStat>& initPeerStat();
+
+  // Returns the connection slot held for this request's server, or null.
+  // Replacing a lease returns the slot it held, so pointing a request at
+  // another server cannot leak the previous one.
+  const std::shared_ptr<SlotRegistry::Lease>& getSlotLease() const
+  {
+    return slotLease_;
+  }
+
+  void setSlotLease(std::shared_ptr<SlotRegistry::Lease> lease)
+  {
+    slotLease_ = std::move(lease);
+  }
 
   void requestRemoval() { removalRequested_ = true; }
 

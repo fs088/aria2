@@ -48,6 +48,8 @@
 #include "SocketRecvBuffer.h"
 #include "LogFactory.h"
 #include "wallclock.h"
+#include "GroupId.h"
+#include "SlotRegistry.h"
 #include "DownloadFailureException.h"
 
 namespace aria2 {
@@ -79,6 +81,12 @@ bool CreateRequestCommand::executeInternal()
   if (getOption()->getAsBool(PREF_SELECT_LEAST_USED_HOST)) {
     getDownloadEngine()->getRequestGroupMan()->getUsedHosts(usedHosts);
   }
+  // The per-server connection count is shared by every download, so a server
+  // this file is free to use may still be full.  |grant| comes back telling us
+  // whether that is what happened, which is a different thing from having no
+  // URI left and must not be treated as a failure.
+  SlotGrant grant;
+  grant.registry = getDownloadEngine()->getRequestGroupMan()->getSlotRegistry();
   setRequest(
       getFileEntry()->getRequest(getRequestGroup()->getURISelector().get(),
                                  getOption()->getAsBool(PREF_REUSE_URI),
@@ -90,8 +98,12 @@ bool CreateRequestCommand::executeInternal()
                                   getOption()->getAsBool(PREF_USE_HEAD)) ||
                                          getOption()->getAsBool(PREF_DRY_RUN)
                                      ? Request::METHOD_HEAD
-                                     : Request::METHOD_GET));
+                                     : Request::METHOD_GET,
+                                 &grant));
   if (!getRequest()) {
+    if (grant.noSlot && !getOption()->getAsBool(PREF_DRY_RUN)) {
+      return holdOrDefer(grant);
+    }
     if (getSegmentMan()) {
       getSegmentMan()->ignoreSegmentFor(getFileEntry());
     }
@@ -123,6 +135,46 @@ bool CreateRequestCommand::executeInternal()
       InitiateConnectionCommandFactory::createInitiateConnectionCommand(
           getCuid(), getRequest(), getFileEntry(), getRequestGroup(),
           getDownloadEngine()));
+  return true;
+}
+
+bool CreateRequestCommand::holdOrDefer(SlotGrant& grant)
+{
+  auto registry = grant.registry;
+  auto gid = getRequestGroup()->getGID();
+  // Say which servers this download is short of a slot on, so that releasing a
+  // connection there wakes it again without a timer being involved.
+  registry->wait(gid, grant.refused);
+
+  if (getRequestGroup()->getNumConnection() > 0) {
+    // Other parts of this download are still transferring, so keep the
+    // download where it is and wait here instead.  Re-adding the command
+    // leaves it inactive until the engine next refreshes, which a release
+    // brings forward; it is not re-examined on every iteration.
+    A2_LOG_DEBUG(fmt("CUID#%" PRId64 " - No per-server slot free,"
+                     " waiting for one.",
+                     getCuid()));
+    addCommandSelf();
+    return false;
+  }
+  // Nothing is transferring at all.  Letting the download keep its place in
+  // the active set while it can do no work would starve the queue, so halt it
+  // and let RequestGroupMan put it back on the waiting queue and fill the
+  // place with the next task.
+  if (!getRequestGroup()->isHaltRequested()) {
+    A2_LOG_INFO(fmt("GID#%s - All slots on its servers are in use,"
+                    " putting the download on hold.",
+                    GroupId::toHex(gid).c_str()));
+    // Keep a pause the user asked for, as that reason outranks this one and
+    // setHaltRequested() clears it.
+    const bool pauseRequested = getRequestGroup()->isPauseRequested();
+    getRequestGroup()->setSlotHold(true);
+    getRequestGroup()->setHaltRequested(true, RequestGroup::NONE);
+    if (pauseRequested) {
+      getRequestGroup()->setPauseRequested(true);
+    }
+    getDownloadEngine()->setRefreshInterval(std::chrono::milliseconds(0));
+  }
   return true;
 }
 

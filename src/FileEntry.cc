@@ -48,6 +48,7 @@
 #include "fmt.h"
 #include "ServerStatMan.h"
 #include "ServerStat.h"
+#include "SlotRegistry.h"
 
 namespace aria2 {
 
@@ -125,11 +126,28 @@ OutputIterator enumerateInFlightHosts(InputIterator first, InputIterator last,
 }
 } // namespace
 
+namespace {
+// Charges |grant| for one connection slot on the server |req| is pointed at,
+// holding it in a lease owned by |req|.  Returns false and leaves no charge
+// behind if the server is full: the lease is a local that is destroyed on the
+// way out.
+bool chargeServer(SlotGrant* grant, const std::shared_ptr<Request>& req)
+{
+  auto lease = std::make_shared<SlotRegistry::Lease>();
+  if (!grant->registry->tryAcquire(*lease, req->getHost())) {
+    grant->refused.push_back(req->getHost());
+    return false;
+  }
+  req->setSlotLease(std::move(lease));
+  return true;
+}
+} // namespace
+
 std::shared_ptr<Request> FileEntry::getRequestWithInFlightHosts(
     URISelector* selector, bool uriReuse,
     const std::vector<std::pair<size_t, std::string>>& usedHosts,
     const std::string& referer, const std::string& method,
-    const std::vector<std::string>& inFlightHosts)
+    const std::vector<std::string>& inFlightHosts, SlotGrant* grant)
 {
   std::shared_ptr<Request> req;
 
@@ -145,6 +163,18 @@ std::shared_ptr<Request> FileEntry::getRequestWithInFlightHosts(
       if (req->setUri(uri)) {
         if (std::count(std::begin(inFlightHosts), std::end(inFlightHosts),
                        req->getHost()) >= maxConnectionPerServer_) {
+          pending.push_back(uri);
+          ignoreHost.push_back(req->getHost());
+          req.reset();
+          continue;
+        }
+        // The overall limit is counted over every download, so a server that
+        // is saturated for this file alone is not saturated for it.  A refused
+        // URI is put back exactly like a locally capped one, but the refusal is
+        // also recorded, because the caller has to wait for a slot here rather
+        // than conclude that there is no URI left to try.
+        if (grant && grant->registry && !chargeServer(grant, req)) {
+          grant->noSlot = true;
           pending.push_back(uri);
           ignoreHost.push_back(req->getHost());
           req.reset();
@@ -181,7 +211,7 @@ std::shared_ptr<Request> FileEntry::getRequestWithInFlightHosts(
 std::shared_ptr<Request> FileEntry::getRequest(
     URISelector* selector, bool uriReuse,
     const std::vector<std::pair<size_t, std::string>>& usedHosts,
-    const std::string& referer, const std::string& method)
+    const std::string& referer, const std::string& method, SlotGrant* grant)
 {
   std::shared_ptr<Request> req;
   if (requestPool_.empty()) {
@@ -190,7 +220,7 @@ std::shared_ptr<Request> FileEntry::getRequest(
                            std::end(inFlightRequests_),
                            std::back_inserter(inFlightHosts));
     return getRequestWithInFlightHosts(selector, uriReuse, usedHosts, referer,
-                                       method, inFlightHosts);
+                                       method, inFlightHosts, grant);
   }
 
   // Skip Request object if it is still
@@ -213,7 +243,7 @@ std::shared_ptr<Request> FileEntry::getRequest(
                            std::back_inserter(inFlightHosts));
 
     req = getRequestWithInFlightHosts(selector, uriReuse, usedHosts, referer,
-                                      method, inFlightHosts);
+                                      method, inFlightHosts, grant);
     if (!req || req->getUri() == (*std::begin(requestPool_))->getUri()) {
       i = std::begin(requestPool_);
     }
@@ -265,7 +295,8 @@ FileEntry::findFasterRequest(const std::shared_ptr<Request>& base)
 std::shared_ptr<Request> FileEntry::findFasterRequest(
     const std::shared_ptr<Request>& base,
     const std::vector<std::pair<size_t, std::string>>& usedHosts,
-    const std::shared_ptr<ServerStatMan>& serverStatMan)
+    const std::shared_ptr<ServerStatMan>& serverStatMan,
+    SlotGrant* grant)
 {
   constexpr int SPEED_THRESHOLD = 20_k;
   if (lastFasterReplace_.difference(global::wallclock()) < startupIdleTime) {
@@ -295,6 +326,15 @@ std::shared_ptr<Request> FileEntry::findFasterRequest(
                        (*i).c_str(), maxConnectionPerServer_));
       continue;
     }
+    // Switching to a server that has no free slot would get the new connection
+    // refused at creation time, so this replacement path has to honour the
+    // overall limit too.
+    if (grant && grant->registry && !grant->registry->hasFreeSlot(host)) {
+      A2_LOG_DEBUG(fmt("%s is at the overall per-server limit, not "
+                       "considered.",
+                       (*i).c_str()));
+      continue;
+    }
     if (findSecond(usedHosts.begin(), usedHosts.end(), host) !=
         usedHosts.end()) {
       A2_LOG_DEBUG(fmt("%s is in usedHosts, not considered", (*i).c_str()));
@@ -317,6 +357,14 @@ std::shared_ptr<Request> FileEntry::findFasterRequest(
     // Candidate URIs where already parsed when populating fastCands.
     (void)fastestRequest->setUri(uri);
     fastestRequest->setReferer(base->getReferer());
+    if (grant && grant->registry && !chargeServer(grant, fastestRequest)) {
+      // Screened above, so this is only reachable if the counts moved while
+      // the candidates were being gathered.  Leave the URI in place for a
+      // later attempt rather than spending it on a connection that was not
+      // made.
+      A2_LOG_DEBUG("Slot charge for faster server refused.");
+      return nullptr;
+    }
     uris_.erase(std::find(uris_.begin(), uris_.end(), uri));
     spentUris_.push_back(uri);
     inFlightRequests_.insert(fastestRequest);

@@ -315,6 +315,9 @@ PrefPtr PREF_SAVE_SESSION = makePref("save-session");
 // value: 1*digit
 PrefPtr PREF_MAX_CONNECTION_PER_SERVER = makePref("max-connection-per-server");
 // value: 1*digit
+PrefPtr PREF_MAX_OVERALL_CONNECTION_PER_SERVER =
+    makePref("max-overall-connection-per-server");
+// value: 1*digit
 PrefPtr PREF_MIN_SPLIT_SIZE = makePref("min-split-size");
 // value: true | false
 PrefPtr PREF_CONDITIONAL_GET = makePref("conditional-get");

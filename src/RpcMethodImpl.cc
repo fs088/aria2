@@ -1669,6 +1669,12 @@ void changeGlobalOption(const Option& option, DownloadEngine* e)
     e->getRequestGroupMan()->setMaxDownloadResult(
         option.getAsInt(PREF_MAX_DOWNLOAD_RESULT));
   }
+  if (option.defined(PREF_MAX_OVERALL_CONNECTION_PER_SERVER)) {
+    // The limit is global, so it is read back from the merged engine option
+    // rather than the one passed in.
+    e->getRequestGroupMan()->setPerServerLimit(
+        e->getOption()->getAsInt(PREF_MAX_OVERALL_CONNECTION_PER_SERVER));
+  }
   if (option.defined(PREF_LOG_LEVEL)) {
     LogFactory::setLogLevel(option.get(PREF_LOG_LEVEL));
   }

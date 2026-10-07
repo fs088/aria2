@@ -49,6 +49,7 @@ aria2c_SOURCES = AllTest.cc\
 	ServerStatManTest.cc\
 	FeedbackURISelectorTest.cc\
 	InorderURISelectorTest.cc\
+	SlotRegistryTest.cc\
 	ServerStatTest.cc\
 	NsCookieParserTest.cc\
 	DirectDiskAdaptorTest.cc\

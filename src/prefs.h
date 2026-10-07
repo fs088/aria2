@@ -268,6 +268,8 @@ extern PrefPtr PREF_SAVE_SESSION;
 // value: 1*digit
 extern PrefPtr PREF_MAX_CONNECTION_PER_SERVER;
 // value: 1*digit
+extern PrefPtr PREF_MAX_OVERALL_CONNECTION_PER_SERVER;
+// value: 1*digit
 extern PrefPtr PREF_MIN_SPLIT_SIZE;
 // value: true | false
 extern PrefPtr PREF_CONDITIONAL_GET;

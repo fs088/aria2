@@ -45,6 +45,7 @@
 #include <memory>
 
 #include "File.h"
+#include "GroupId.h"
 #include "Request.h"
 #include "URIResult.h"
 #include "error_code.h"
@@ -101,7 +102,7 @@ private:
       URISelector* selector, bool uriReuse,
       const std::vector<std::pair<size_t, std::string>>& usedHosts,
       const std::string& referer, const std::string& method,
-      const std::vector<std::string>& inFlightHosts);
+      const std::vector<std::string>& inFlightHosts, SlotGrant* grant);
 
 public:
   FileEntry();
@@ -177,12 +178,16 @@ public:
   // method is ignored. If uriReuse is true and selector does not
   // returns Request object either because uris_ is empty or all URI
   // are not be usable because maxConnectionPerServer_ limit, then
-  // reuse used URIs and do selection again.
+  // reuse used URIs and do selection again.  When |grant| names a registry,
+  // a connection slot is taken from it for the chosen server and held by the
+  // returned Request; if no server has a slot free, no request is returned
+  // and grant->noSlot is set.
   std::shared_ptr<Request>
   getRequest(URISelector* selector, bool uriReuse,
              const std::vector<std::pair<size_t, std::string>>& usedHosts,
              const std::string& referer = A2STR::NIL,
-             const std::string& method = Request::METHOD_GET);
+             const std::string& method = Request::METHOD_GET,
+             SlotGrant* grant = nullptr);
 
   // Finds pooled Request object which is faster than passed one,
   // comparing their PeerStat objects. If such Request is found, it is
@@ -190,11 +195,15 @@ public:
   std::shared_ptr<Request>
   findFasterRequest(const std::shared_ptr<Request>& base);
 
-  // Finds faster server using ServerStatMan.
+  // Finds faster server using ServerStatMan.  When |grant| names a registry, a
+  // server that has no free connection slot is not considered, so that this
+  // replacement path cannot walk past the per-server limit, and the slot for
+  // the server that is chosen is held by the returned Request.
   std::shared_ptr<Request> findFasterRequest(
       const std::shared_ptr<Request>& base,
       const std::vector<std::pair<size_t, std::string>>& usedHosts,
-      const std::shared_ptr<ServerStatMan>& serverStatMan);
+      const std::shared_ptr<ServerStatMan>& serverStatMan,
+      SlotGrant* grant = nullptr);
 
   void poolRequest(const std::shared_ptr<Request>& request);
 

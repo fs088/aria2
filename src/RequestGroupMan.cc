@@ -77,6 +77,7 @@
 #include "SingletonHolder.h"
 #include "Notifier.h"
 #include "PeerStat.h"
+#include "SlotRegistry.h"
 #include "WrDiskCache.h"
 #include "PieceStorage.h"
 #include "DiskAdaptor.h"
@@ -105,7 +106,8 @@ void appendReservedGroup(RequestGroupList& list, InputIterator first,
 RequestGroupMan::RequestGroupMan(
     std::vector<std::shared_ptr<RequestGroup>> requestGroups,
     int maxConcurrentDownloads, const Option* option)
-    : maxConcurrentDownloads_(maxConcurrentDownloads),
+    : slots_(std::make_unique<SlotRegistry>()),
+      maxConcurrentDownloads_(maxConcurrentDownloads),
       optimizeConcurrentDownloads_(false),
       optimizeConcurrentDownloadsCoeffA_(5.),
       optimizeConcurrentDownloadsCoeffB_(25.),
@@ -127,11 +129,29 @@ RequestGroupMan::RequestGroupMan(
       numStoppedTotal_(0)
 {
   setupOptimizeConcurrentDownloads();
+  setPerServerLimit(option->getAsInt(PREF_MAX_OVERALL_CONNECTION_PER_SERVER));
   appendReservedGroup(reservedGroups_, requestGroups.begin(),
                       requestGroups.end());
 }
 
-RequestGroupMan::~RequestGroupMan() { openedFileCounter_->deactivate(); }
+void RequestGroupMan::setPerServerLimit(size_t maxConnectionPerServer)
+{
+  slots_->setLimit(maxConnectionPerServer);
+  // Raising the limit may be what a parked download has been waiting for, and
+  // no connection was released for it to notice.  Ask for a queue check; it is
+  // cheap when nothing is waiting.
+  requestQueueCheck();
+}
+
+RequestGroupMan::~RequestGroupMan()
+{
+  // Untie the wake handler before anything starts releasing slots.  It names
+  // the DownloadEngine, and requests are destroyed on the way out here, so a
+  // release would otherwise reach back into an engine that is tearing this
+  // manager down.  Nobody needs waking during shutdown.
+  slots_->setWakeHandler(nullptr);
+  openedFileCounter_->deactivate();
+}
 
 bool RequestGroupMan::setupOptimizeConcurrentDownloads(void)
 {
@@ -234,7 +254,13 @@ size_t RequestGroupMan::changeReservedGroupPosition(a2_gid_t gid, int pos,
 
 bool RequestGroupMan::removeReservedGroup(a2_gid_t gid)
 {
-  return reservedGroups_.remove(gid);
+  if (reservedGroups_.remove(gid)) {
+    // A download taken out of the queue by the user holds no slots and must
+    // not be woken for one either.
+    slots_->cancelWait(gid);
+    return true;
+  }
+  return false;
 }
 
 namespace {
@@ -420,7 +446,10 @@ public:
           }
 #endif // ENABLE_BITTORRENT
         }
-        else {
+        else if (!group->isSlotHold()) {
+          // A download held for want of a slot is not stopping, so saying it
+          // did not complete would be misleading as well as repetitive: it is
+          // going to resume.
           A2_LOG_NOTICE(
               fmt(_("Download GID#%s not complete: %s"),
                   GroupId::toHex(group->getGID()).c_str(),
@@ -431,7 +460,7 @@ public:
       catch (RecoverableException& ex) {
         A2_LOG_ERROR_EX(EX_EXCEPTION_CAUGHT, ex);
       }
-      if (group->isPauseRequested()) {
+      if (group->isPauseRequested() || group->isSlotHold()) {
         group->setState(RequestGroup::STATE_WAITING);
         reservedGroups_.push_front(group->getGID(), group);
         group->releaseRuntimeResource(e_);
@@ -442,13 +471,22 @@ public:
           changeOption(group, *pendingOption, e_);
         }
 
-        if (group->isRestartRequested()) {
-          group->setPauseRequested(false);
-        }
-        else {
-          util::executeHookByOptName(group, e_->getOption(),
-                                     PREF_ON_DOWNLOAD_PAUSE);
-          notifyDownloadEvent(EVENT_ON_DOWNLOAD_PAUSE, group);
+        if (group->isPauseRequested()) {
+          // A paused download is not waiting for capacity, so drop the slot
+          // wait it had registered: unpausing starts it afresh and it asks
+          // again when it next selects a URI.  A download held for want of a
+          // slot keeps its wait, because a released connection is exactly what
+          // has to bring it back.
+          e_->getRequestGroupMan()->getSlotRegistry()->cancelWait(
+              group->getGID());
+          if (group->isRestartRequested()) {
+            group->setPauseRequested(false);
+          }
+          else {
+            util::executeHookByOptName(group, e_->getOption(),
+                                       PREF_ON_DOWNLOAD_PAUSE);
+            notifyDownloadEvent(EVENT_ON_DOWNLOAD_PAUSE, group);
+          }
         }
         // TODO Should we have to prepend spend uris to remaining uris
         // in case PREF_REUSE_URI is disabled?
@@ -458,6 +496,9 @@ public:
         e_->getRequestGroupMan()->addDownloadResult(dr);
         executeStopHook(group, e_->getOption(), dr->result);
         group->releaseRuntimeResource(e_);
+        // The download is finished, so nothing may wake on its behalf again.
+        e_->getRequestGroupMan()->getSlotRegistry()->cancelWait(
+            group->getGID());
       }
 
       group->setRestartRequested(false);
@@ -550,11 +591,26 @@ void RequestGroupMan::fillRequestGroupFromReserver(DownloadEngine* e)
       pending.push_back(groupToAdd);
       continue;
     }
+    // A download put on hold for want of a per-server slot stays in the queue
+    // until a slot is actually released.  It has to be skipped only while it is
+    // still registered as waiting, because its own stopping is what asks for
+    // this queue check: adding it straight back would have it started,
+    // refused and halted again in a tight circle that does nothing at all.
+    // Releasing a slot removes the registration, and the wake sent with it
+    // asks for the check that then lets the download through.
+    if (groupToAdd->isSlotHold() && slots_->isWaiting(groupToAdd->getGID())) {
+      pending.push_back(groupToAdd);
+      continue;
+    }
     // Drop pieceStorage here because paused download holds its
     // reference.
     groupToAdd->dropPieceStorage();
     configureRequestGroup(groupToAdd);
     groupToAdd->setRequestGroupMan(this);
+    // A download held for want of a per-server slot is being started again, so
+    // the hold no longer applies.  The slots it had were released when it was
+    // held and the requests it creates now charge them afresh.
+    groupToAdd->setSlotHold(false);
     groupToAdd->setState(RequestGroup::STATE_ACTIVE);
     ++numActive_;
     requestGroups_.push_back(groupToAdd->getGID(), groupToAdd);

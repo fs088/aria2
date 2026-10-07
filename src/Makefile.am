@@ -231,6 +231,7 @@ SRCS =  \
 	SocketBuffer.cc SocketBuffer.h\
 	SocketCore.cc SocketCore.h\
 	SocketRecvBuffer.cc SocketRecvBuffer.h\
+	SlotRegistry.cc SlotRegistry.h\
 	SpeedCalc.cc SpeedCalc.h\
 	StatCalc.h\
 	StreamCheckIntegrityEntry.cc StreamCheckIntegrityEntry.h\

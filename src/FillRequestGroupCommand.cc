@@ -43,6 +43,8 @@
 #include "DownloadContext.h"
 #include "fmt.h"
 #include "wallclock.h"
+#include "GroupId.h"
+#include "SlotRegistry.h"
 
 namespace aria2 {
 
@@ -50,6 +52,21 @@ FillRequestGroupCommand::FillRequestGroupCommand(cuid_t cuid, DownloadEngine* e)
     : Command(cuid), e_(e)
 {
   setStatusRealtime();
+  // A download parked for want of a per-server slot is not re-examined on a
+  // timer.  It is brought back by the release that actually frees capacity, and
+  // this command is what maintains the queue, so the wake is turned into a
+  // queue check here: nothing else has to be revisited, and a server that
+  // stays full costs no work at all.
+  auto& rgman = e_->getRequestGroupMan();
+  if (rgman) {
+    rgman->getSlotRegistry()->setWakeHandler([e](a2_gid_t gid) {
+      A2_LOG_DEBUG(fmt("Slot released, GID#%s may now be able to proceed.",
+                       GroupId::toHex(gid).c_str()));
+      e->getRequestGroupMan()->requestQueueCheck();
+      e->setNoWait(true);
+      e->setRefreshInterval(std::chrono::milliseconds(0));
+    });
+  }
 }
 
 FillRequestGroupCommand::~FillRequestGroupCommand() = default;

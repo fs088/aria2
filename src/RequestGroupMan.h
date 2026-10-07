@@ -56,6 +56,7 @@ class Command;
 struct DownloadResult;
 class ServerStatMan;
 class ServerStat;
+class SlotRegistry;
 class Option;
 class OutputFile;
 class UriListParser;
@@ -68,6 +69,13 @@ typedef IndexedList<a2_gid_t, std::shared_ptr<DownloadResult>>
 
 class RequestGroupMan {
 private:
+  // Per-server connection counts held across every download, so that
+  // --max-overall-connection-per-server can be applied globally rather than
+  // per download.  Declared first so that it is destroyed last: a Request
+  // releases its slot when it is destroyed, and the Requests live inside the
+  // groups below, so this must outlive them.
+  std::unique_ptr<SlotRegistry> slots_;
+
   RequestGroupList requestGroups_;
   RequestGroupList reservedGroups_;
   DownloadResultList downloadResults_;
@@ -334,6 +342,17 @@ public:
   {
     return serverStatMan_;
   }
+
+  // The per-server connection counts shared by every download.  Never null
+  // once the manager is constructed, so callers can hand it to FileEntry
+  // without checking.
+  SlotRegistry* getSlotRegistry() const { return slots_.get(); }
+
+  // Applies the global per-server connection maximum,
+  // --max-overall-connection-per-server.  A value of 0 is unlimited.  Downloads
+  // already holding more than a newly lowered limit are not cut off; the limit
+  // only stops further grants until they fall back.
+  void setPerServerLimit(size_t maxConnectionPerServer);
 
   void setMaxDownloadResult(size_t v) { maxDownloadResult_ = v; }
 

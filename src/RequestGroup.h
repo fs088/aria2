@@ -181,6 +181,12 @@ private:
 
   bool pauseRequested_;
 
+  // Set when the download was taken off-line for want of a per-server slot
+  // rather than by the user or by finishing.  Such a group returns to the
+  // waiting queue with its progress intact and is retried as soon as a slot is
+  // released, so that other downloads can use its place in the meantime.
+  bool slotHold_;
+
   // restartRequested_ indicates that this download should be
   // restarted.  Usually, it is used with pauseRequested_ to stop
   // download first.
@@ -352,6 +358,10 @@ public:
   void setPauseRequested(bool f);
 
   bool isPauseRequested() const { return pauseRequested_; }
+
+  bool isSlotHold() const { return slotHold_; }
+
+  void setSlotHold(bool f) { slotHold_ = f; }
 
   void setRestartRequested(bool f);
 

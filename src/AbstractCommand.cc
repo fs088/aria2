@@ -239,8 +239,16 @@ bool AbstractCommand::execute()
         if (getOption()->getAsBool(PREF_SELECT_LEAST_USED_HOST)) {
           getDownloadEngine()->getRequestGroupMan()->getUsedHosts(usedHosts);
         }
+        // A replacement connection is a new connection to a server, so the
+        // per-server limit applies just as it does when a request is first
+        // selected.  Nothing is waited for here: this switch is opportunistic,
+        // and the download carries on with the request it already has when no
+        // other server can be granted.
+        SlotGrant grant;
+        grant.registry = e_->getRequestGroupMan()->getSlotRegistry();
         auto fasterRequest = fileEntry_->findFasterRequest(
-            req_, usedHosts, e_->getRequestGroupMan()->getServerStatMan());
+            req_, usedHosts, e_->getRequestGroupMan()->getServerStatMan(),
+            &grant);
         if (fasterRequest) {
           useFasterRequest(fasterRequest);
           return true;

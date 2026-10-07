@@ -37,6 +37,8 @@
 
 #include "AbstractCommand.h"
 
+#include "SlotRegistry.h"
+
 namespace aria2 {
 
 // CreateRequestCommand selects URI using URISelector object and
@@ -44,8 +46,21 @@ namespace aria2 {
 // command using
 // InitiateConnectionCommandFactory. InitiateConnectionCommandFactory
 // creates Command based on the protocol of selected URI.  If there is
-// no URI available, then throws exceptions.
+// no URI available, then throws exceptions.  URIs that are available only
+// on servers already at a per-server slot limit do not fail the download:
+// holdOrDefer() parks it until a slot is released.
 class CreateRequestCommand : public AbstractCommand {
+private:
+  // Deals with a URI selection that found servers but no slot on any of
+  // them.  |grant| names the servers that refused.  When this download still
+  // has connections running the command re-adds itself and returns false, so
+  // the parts already transferring carry on.  When it has none at all the
+  // download would be doing nothing while holding a place in the active set,
+  // so it is halted and put back on the waiting queue instead, and true is
+  // returned.  Either way a waiter is registered, and that is what brings the
+  // download back to life when a slot is freed -- no timer is involved.
+  bool holdOrDefer(SlotGrant& grant);
+
 public:
   CreateRequestCommand(cuid_t cuid, RequestGroup* requestGroup,
                        DownloadEngine* e);

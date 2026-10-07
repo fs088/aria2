@@ -447,6 +447,20 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
     op->setChangeOptionForReserved(true);
     handlers.push_back(op);
   }
+  // This caps a server across every download at once, so it is global only: a
+  // per-download override would be meaningless, because what is being limited is
+  // the total all downloads together place on the server.
+  {
+    OptionHandler* op(new NumberOptionHandler(
+        PREF_MAX_OVERALL_CONNECTION_PER_SERVER,
+        TEXT_MAX_OVERALL_CONNECTION_PER_SERVER, "0", 0, -1));
+    op->addTag(TAG_ADVANCED);
+    op->addTag(TAG_FTP);
+    op->addTag(TAG_HTTP);
+    op->setInitialOption(true);
+    op->setChangeGlobalOption(true);
+    handlers.push_back(op);
+  }
   {
     OptionHandler* op(new UnitNumberOptionHandler(
         PREF_MAX_DOWNLOAD_LIMIT, TEXT_MAX_DOWNLOAD_LIMIT, "0", 0));

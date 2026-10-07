@@ -185,6 +185,28 @@ HTTP/FTP/SFTP Options
   The maximum number of connections to one server for each download.
   Default: ``1``
 
+.. option:: --max-overall-connection-per-server=<NUM>
+
+  The maximum number of connections to one server across all downloads
+  at the same time.  ``0`` means no limit.  Unlike
+  :option:`--max-connection-per-server <-x>`, which each download is
+  allowed on its own, this limits the server itself, so it counts every
+  download that uses it.  Default: ``0``
+
+  A download which finds URIs but no free slot on any of their servers is
+  not treated as an error and is not retried on a timer.  If it still has
+  connections running it waits for a slot; if it has none, it is put back
+  on the waiting queue -- where a paused download sits -- and the next
+  queued download takes its place in
+  :option:`--max-concurrent-downloads <-j>`.  It is resumed as soon as
+  another download releases a slot on one of its servers.
+
+  .. note::
+
+    Lowering the limit while downloads are running does not interrupt
+    them: the count is only brought down as connections are released
+    naturally, and no further slot is granted on a server until then.
+
 .. option:: --max-file-not-found=<NUM>
 
   If aria2 receives "file not found" status from the remote HTTP/FTP
@@ -3365,6 +3387,7 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
   * :option:`log-level <--log-level>`
   * :option:`max-concurrent-downloads <-j>`
   * :option:`max-download-result <--max-download-result>`
+  * :option:`max-overall-connection-per-server <--max-overall-connection-per-server>`
   * :option:`max-overall-download-limit <--max-overall-download-limit>`
   * :option:`max-overall-upload-limit <--max-overall-upload-limit>`
   * :option:`optimize-concurrent-downloads <--optimize-concurrent-downloads>`
