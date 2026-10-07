@@ -200,6 +200,12 @@ public:
   // is returned.  For HTTPS, always returns V_TUNNEL.
   const std::string& resolveProxyMethod(const std::string& protocol) const;
 
+  // Returns true if the proxy defined for |protocol| is a SOCKS5 one,
+  // that is, if the URI it was written with carries a socks5:// or
+  // socks5h:// scheme.  Such a proxy is given a request in the SOCKS5
+  // language instead of a CONNECT, and is not asked to forward anything.
+  bool isSocks5Proxy(const std::string& protocol) const;
+
   const std::shared_ptr<Option>& getOption() const;
 
   const std::shared_ptr<DownloadContext>& getDownloadContext() const;

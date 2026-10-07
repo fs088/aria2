@@ -60,6 +60,7 @@
 #include "FtpNegotiationConnectChain.h"
 #include "FtpTunnelRequestConnectChain.h"
 #include "HttpRequestConnectChain.h"
+#include "Socks5NegotiationConnectChain.h"
 #ifdef HAVE_LIBSSH2
 #  include "SftpNegotiationConnectChain.h"
 #  include "SftpNegotiationCommand.h"
@@ -85,6 +86,17 @@ std::unique_ptr<Command> FtpInitiateConnectionCommand::createNextCommandProxied(
   std::string options;
   std::shared_ptr<SocketCore> pooledSocket;
   std::string proxyMethod = resolveProxyMethod(getRequest()->getProtocol());
+
+  if (proxyMethod == V_TUNNEL && isSocks5Proxy(getRequest()->getProtocol()) &&
+      getRequest()->getProtocol() == "ftp") {
+    // An FTP download needs a second connection for the data itself, and
+    // the tunnel for it is asked for in HTTP, which a SOCKS5 server does
+    // not answer.  Failing here says so before any of the negotiation has
+    // been gone through.
+    throw DL_ABORT_EX(
+        "Using a SOCKS5 proxy for an FTP download is not supported, because "
+        "aria2 cannot proxy the data connection of one.");
+  }
 
   // sftp always use tunnel mode
   if (proxyMethod == V_GET) {
@@ -118,7 +130,12 @@ std::unique_ptr<Command> FtpInitiateConnectionCommand::createNextCommandProxied(
       c->setControlChain(std::make_shared<HttpRequestConnectChain>());
     }
     else if (proxyMethod == V_TUNNEL) {
-      c->setControlChain(std::make_shared<FtpTunnelRequestConnectChain>());
+      if (isSocks5Proxy(getRequest()->getProtocol())) {
+        c->setControlChain(std::make_shared<Socks5NegotiationConnectChain>());
+      }
+      else {
+        c->setControlChain(std::make_shared<FtpTunnelRequestConnectChain>());
+      }
     }
     else {
       // Unreachable

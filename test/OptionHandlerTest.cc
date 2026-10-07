@@ -285,7 +285,8 @@ void OptionHandlerTest::testHttpProxyOptionHandler()
   }
   catch (Exception& e) {
   }
-  CPPUNIT_ASSERT_EQUAL(std::string("[http://][USER:PASSWORD@]HOST[:PORT]"),
+  CPPUNIT_ASSERT_EQUAL(std::string("[http://|https://|ftp://|socks5://|"
+                                    "socks5h://][USER:PASSWORD@]HOST[:PORT]"),
                        handler.createPossibleValuesString());
 
   handler.parse(option, "http://user%40:passwd%40@proxy:8080");
@@ -295,6 +296,36 @@ void OptionHandlerTest::testHttpProxyOptionHandler()
   handler.parse(option, "http://[::1]:8080");
   CPPUNIT_ASSERT_EQUAL(std::string("http://[::1]:8080/"),
                        option.get(PREF_HTTP_PROXY));
+
+  // A SOCKS5 proxy keeps the scheme it was written with, which is how the
+  // rest of aria2 learns that it is to be spoken to in SOCKS5.  1080 is its
+  // conventional port, so a URI which names it is stored without.
+  handler.parse(option, "socks5://proxy:1080");
+  CPPUNIT_ASSERT_EQUAL(std::string("socks5://proxy/"),
+                       option.get(PREF_HTTP_PROXY));
+
+  handler.parse(option, "socks5h://proxy:1081");
+  CPPUNIT_ASSERT_EQUAL(std::string("socks5h://proxy:1081/"),
+                       option.get(PREF_HTTP_PROXY));
+
+  handler.parse(option, "socks5://user:passwd@proxy:1080");
+  CPPUNIT_ASSERT_EQUAL(std::string("socks5://user:passwd@proxy/"),
+                       option.get(PREF_HTTP_PROXY));
+
+  handler.parse(option, "socks5://[::1]:1080");
+  CPPUNIT_ASSERT_EQUAL(std::string("socks5://[::1]/"),
+                       option.get(PREF_HTTP_PROXY));
+
+  // A scheme aria2 cannot speak to is not quietly turned into one it can:
+  // SOCKS4 is named here because it is the neighbour of SOCKS5 on the same
+  // port, and answering it as if it were an HTTP proxy would waste a
+  // download rather than say what is wrong.
+  try {
+    handler.parse(option, "socks4://proxy:1080");
+    CPPUNIT_FAIL("exception must be thrown.");
+  }
+  catch (Exception& e) {
+  }
 }
 
 void OptionHandlerTest::testDeprecatedOptionHandler()

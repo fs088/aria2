@@ -67,6 +67,7 @@
 #include "error_code.h"
 #include "SocketRecvBuffer.h"
 #include "ChecksumCheckIntegrityEntry.h"
+#include "Socks5Handshake.h"
 #ifdef ENABLE_ASYNC_DNS
 #  include "AsyncNameResolver.h"
 #  include "AsyncNameResolverMan.h"
@@ -877,11 +878,23 @@ bool AbstractCommand::checkIfConnectionEstablished(
 const std::string&
 AbstractCommand::resolveProxyMethod(const std::string& protocol) const
 {
-  if (getOption()->get(PREF_PROXY_METHOD) == V_TUNNEL || protocol == "https" ||
+  // A SOCKS5 proxy is only ever given a connection to set up, and the
+  // traffic which follows it is not addressed to the proxy in any way,
+  // so there is no request for it to forward: tunnel is the only method
+  // it has.
+  if (isSocks5Proxy(protocol) ||
+      getOption()->get(PREF_PROXY_METHOD) == V_TUNNEL || protocol == "https" ||
       protocol == "sftp") {
     return V_TUNNEL;
   }
   return V_GET;
+}
+
+bool AbstractCommand::isSocks5Proxy(const std::string& protocol) const
+{
+  uri::UriStruct us;
+  return uri::parse(us, getProxyUri(protocol, getOption().get())) &&
+         socks5::isSocks5Scheme(us.protocol);
 }
 
 const std::shared_ptr<Option>& AbstractCommand::getOption() const

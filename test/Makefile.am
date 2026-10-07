@@ -50,6 +50,7 @@ aria2c_SOURCES = AllTest.cc\
 	FeedbackURISelectorTest.cc\
 	InorderURISelectorTest.cc\
 	SlotRegistryTest.cc\
+	Socks5HandshakeTest.cc\
 	ServerStatTest.cc\
 	NsCookieParserTest.cc\
 	DirectDiskAdaptorTest.cc\

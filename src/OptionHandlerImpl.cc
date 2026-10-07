@@ -63,6 +63,7 @@
 #include "array_fun.h"
 #include "help_tags.h"
 #include "MessageDigest.h"
+#include "Socks5Handshake.h"
 
 namespace aria2 {
 
@@ -503,30 +504,38 @@ void HttpProxyOptionHandler::parseArg(Option& option,
 {
   if (optarg.empty()) {
     option.put(pref_, optarg);
+    return;
+  }
+  uri::UriStruct us;
+  if (uri::parse(us, optarg) && socks5::isSocks5Scheme(us.protocol)) {
+    // A SOCKS5 proxy is written with the scheme which tells aria2 to
+    // speak SOCKS5 to it, so the scheme is the answer and is kept.
+    option.put(pref_, uri::construct(us));
+    return;
+  }
+  std::string uri;
+  if (util::startsWith(optarg, "http://") ||
+      util::startsWith(optarg, "https://") ||
+      util::startsWith(optarg, "ftp://")) {
+    uri = optarg;
   }
   else {
-    std::string uri;
-    if (util::startsWith(optarg, "http://") ||
-        util::startsWith(optarg, "https://") ||
-        util::startsWith(optarg, "ftp://")) {
-      uri = optarg;
-    }
-    else {
-      uri = "http://";
-      uri += optarg;
-    }
-    uri::UriStruct us;
-    if (!uri::parse(us, uri)) {
-      throw DL_ABORT_EX(_("unrecognized proxy format"));
-    }
-    us.protocol = "http";
-    option.put(pref_, uri::construct(us));
+    uri = "http://";
+    uri += optarg;
   }
+  if (!uri::parse(us, uri)) {
+    throw DL_ABORT_EX(_("unrecognized proxy format"));
+  }
+  // Everything which is not a SOCKS5 proxy is spoken to in HTTP, so that
+  // the request aria2 sends it can be built as an HTTP one.
+  us.protocol = "http";
+  option.put(pref_, uri::construct(us));
 }
 
 std::string HttpProxyOptionHandler::createPossibleValuesString() const
 {
-  return "[http://][USER:PASSWORD@]HOST[:PORT]";
+  return "[http://|https://|ftp://|socks5://|socks5h://][USER:PASSWORD@]"
+         "HOST[:PORT]";
 }
 
 LocalFilePathOptionHandler::LocalFilePathOptionHandler(

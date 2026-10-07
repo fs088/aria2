@@ -55,6 +55,7 @@
 #include "ConnectCommand.h"
 #include "HttpRequestConnectChain.h"
 #include "HttpProxyRequestConnectChain.h"
+#include "Socks5NegotiationConnectChain.h"
 
 namespace aria2 {
 
@@ -89,7 +90,12 @@ std::unique_ptr<Command> HttpInitiateConnectionCommand::createNextCommand(
           getCuid(), getRequest(), proxyRequest, getFileEntry(),
           getRequestGroup(), getDownloadEngine(), getSocket());
       if (proxyMethod == V_TUNNEL) {
-        c->setControlChain(std::make_shared<HttpProxyRequestConnectChain>());
+        if (isSocks5Proxy(getRequest()->getProtocol())) {
+          c->setControlChain(std::make_shared<Socks5NegotiationConnectChain>());
+        }
+        else {
+          c->setControlChain(std::make_shared<HttpProxyRequestConnectChain>());
+        }
       }
       else if (proxyMethod == V_GET) {
         c->setControlChain(std::make_shared<HttpRequestConnectChain>());

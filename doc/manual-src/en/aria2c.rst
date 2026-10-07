@@ -118,8 +118,35 @@ HTTP/FTP/SFTP Options
   proxy server for a particular protocol using :option:`--http-proxy`,
   :option:`--https-proxy` and :option:`--ftp-proxy` options.  This affects all
   downloads.
-  The format of PROXY is ``[http://][USER:PASSWORD@]HOST[:PORT]``.
+  The format of PROXY is
+  ``[http://|https://|ftp://|socks5://|socks5h://][USER:PASSWORD@]HOST[:PORT]``.
+  When the scheme is left out, ``http://`` is assumed.
   See also `ENVIRONMENT`_ section.
+
+  A proxy written with the ``socks5://`` or the ``socks5h://`` scheme is
+  spoken to with SOCKS5 instead of HTTP:
+
+  * ``socks5://``: aria2 resolves the host of the download itself and gives
+    the proxy the address it found.
+  * ``socks5h://``: aria2 gives the proxy the name and lets the proxy look
+    it up.  Use this when it is the proxy, and not aria2, which can see the
+    name.
+
+  Either way aria2 asks the proxy for one connection per connection to the
+  server and then talks to the server through it, so
+  :option:`--proxy-method` asks nothing of a SOCKS5 proxy.  A port left out
+  is taken to be 1080.  A user and password, given in the URI or by
+  *--all-proxy-{user,passwd}*, are offered to the proxy by the SOCKS5
+  username/password method (RFC 1929) if it asks for one, and a proxy which
+  wants credentials that were not given is reported as refusing the
+  download.
+
+  .. note::
+
+    An FTP download needs a second connection for the data itself, and aria2
+    knows how to ask for that one only in HTTP, so a proxy option for FTP
+    cannot be given a ``socks5://`` URI.  SFTP carries its data over the
+    connection it has already made and works.
 
   .. note::
 
@@ -304,7 +331,8 @@ HTTP/FTP/SFTP Options
 
   Set the method to use in proxy request.  METHOD is either ``get`` or
   ``tunnel``. HTTPS downloads always use ``tunnel`` regardless of this
-  option.
+  option.  A SOCKS5 proxy does too, because it is asked for a connection and
+  never for a request to forward.
   Default: ``get``
 
 .. option:: -R, --remote-time [true|false]
@@ -527,7 +555,9 @@ HTTP Specific Options
   Use a proxy server for HTTP.  To override a previously defined proxy,
   use "".
   See also the :option:`--all-proxy` option.  This affects all http downloads.
-  The format of PROXY is ``[http://][USER:PASSWORD@]HOST[:PORT]``
+  The format of PROXY is
+  ``[http://|https://|ftp://|socks5://|socks5h://][USER:PASSWORD@]HOST[:PORT]``,
+  and what the schemes mean is described under :option:`--all-proxy`.
 
 .. option:: --http-proxy-passwd=<PASSWD>
 
@@ -542,7 +572,9 @@ HTTP Specific Options
   Use a proxy server for HTTPS. To override a previously defined proxy,
   use "".
   See also the :option:`--all-proxy` option.  This affects all https download.
-  The format of PROXY is ``[http://][USER:PASSWORD@]HOST[:PORT]``
+  The format of PROXY is
+  ``[http://|https://|ftp://|socks5://|socks5h://][USER:PASSWORD@]HOST[:PORT]``,
+  and what the schemes mean is described under :option:`--all-proxy`.
 
 .. option:: --https-proxy-passwd=<PASSWD>
 
@@ -653,7 +685,9 @@ FTP/SFTP Specific Options
   Use a proxy server for FTP.  To override a previously defined proxy,
   use "".
   See also the :option:`--all-proxy` option.  This affects all ftp downloads.
-  The format of PROXY is ``[http://][USER:PASSWORD@]HOST[:PORT]``
+  The format of PROXY is ``[http://][USER:PASSWORD@]HOST[:PORT]``.  A SOCKS5
+  proxy cannot be used here: an FTP download needs a second connection for
+  its data, and aria2 can ask for that one only in HTTP.
 
 .. option:: --ftp-proxy-passwd=<PASSWD>
 

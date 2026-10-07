@@ -232,6 +232,9 @@ SRCS =  \
 	SocketCore.cc SocketCore.h\
 	SocketRecvBuffer.cc SocketRecvBuffer.h\
 	SlotRegistry.cc SlotRegistry.h\
+	Socks5Handshake.cc Socks5Handshake.h\
+	Socks5NegotiationCommand.cc Socks5NegotiationCommand.h\
+	Socks5NegotiationConnectChain.h\
 	SpeedCalc.cc SpeedCalc.h\
 	StatCalc.h\
 	StreamCheckIntegrityEntry.cc StreamCheckIntegrityEntry.h\
