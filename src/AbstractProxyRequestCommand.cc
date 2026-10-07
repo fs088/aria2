@@ -72,6 +72,8 @@ bool AbstractProxyRequestCommand::executeInternal()
   if (httpConnection_->sendBufferIsEmpty()) {
     auto httpRequest = make_unique<HttpRequest>();
     httpRequest->setUserAgent(getOption()->get(PREF_USER_AGENT));
+    httpRequest->setNoWantDigest(
+        getOption()->getAsBool(PREF_NO_WANT_DIGEST_HEADER));
     httpRequest->setRequest(getRequest());
     httpRequest->setProxyRequest(proxyRequest_);
 

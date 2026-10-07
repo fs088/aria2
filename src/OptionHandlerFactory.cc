@@ -1247,9 +1247,12 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
     op->setChangeOptionForReserved(true);
     handlers.push_back(op);
   }
+  // Deliberately inverted from upstream: do not send Want-Digest unless the
+  // user opts in. Many servers do not implement the Digest response header,
+  // so asking for it only adds a round-trip worth of noise.
   {
     OptionHandler* op(new BooleanOptionHandler(
-        PREF_NO_WANT_DIGEST_HEADER, TEXT_NO_WANT_DIGEST_HEADER, A2_V_FALSE,
+        PREF_NO_WANT_DIGEST_HEADER, TEXT_NO_WANT_DIGEST_HEADER, A2_V_TRUE,
         OptionHandler::OPT_ARG));
     op->addTag(TAG_HTTP);
     op->setInitialOption(true);

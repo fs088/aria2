@@ -584,7 +584,7 @@ HTTP Specific Options
 .. option:: --no-want-digest-header [true|false]
 
   Whether to disable Want-Digest header when doing requests.
-  Default: ``false``
+  Default: ``true``
 
 .. option:: -U, --user-agent=<USER_AGENT>
 
